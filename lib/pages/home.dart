@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class Home extends StatefulWidget {
   const Home({Key? key}) : super(key: key);
@@ -18,6 +19,28 @@ class _HomeState extends State<Home> {
     todoList.addAll(['buy milk', 'wash dishes', 'eat meat']);
   }
 
+  void menuOpen() {
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (BuildContext content) {
+      return Scaffold(
+          appBar: AppBar(title: const Text('menu')),
+          body: Column(
+            children: [
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamedAndRemoveUntil(
+                      context, '/', (route) => false);
+                },
+                child: const Text('back to main'),
+              ),
+              const Padding(padding: EdgeInsets.only(left: 15)),
+              const Text('New menu'),
+            ],
+          ));
+    }));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -25,35 +48,46 @@ class _HomeState extends State<Home> {
       appBar: AppBar(
         title: const Text('List to do'),
         centerTitle: true,
+        actions: [
+          IconButton(onPressed: menuOpen, icon: const Icon(Icons.menu))
+        ],
       ),
-      body: ListView.builder(
-          itemCount: todoList.length,
-          itemBuilder: (BuildContext context, int index) {
-            return Dismissible(
-              key: Key(todoList[index]),
-              child: Card(
-                child: ListTile(
-                  title: Text(todoList[index]),
-                  trailing: IconButton(
-                    icon: const Icon(
-                      Icons.delete_sweep,
-                      color: Colors.orange,
+      body: StreamBuilder(
+        stream: FirebaseFirestore.instance.collection('items').snapshots(),
+        builder: (BuildContext context, AsyncSnapshot<QuerySnapshot> snapshot) {
+          if (!snapshot.hasData) return Text('No lists');
+          return ListView.builder(
+              itemCount: snapshot.data!.docs.length,
+              itemBuilder: (BuildContext context, int index) {
+                return Dismissible(
+                  key: Key(snapshot.data!.docs[index].id),
+                  child: Card(
+                    child: ListTile(
+                      title: Text(snapshot.data!.docs[index].get('item')),
+                      trailing: IconButton(
+                        icon: const Icon(
+                          Icons.delete_sweep,
+                          color: Colors.orange,
+                        ),
+                        onPressed: () {
+                          FirebaseFirestore.instance
+                              .collection('items')
+                              .doc(snapshot.data!.docs[index].id)
+                              .delete();
+                        },
+                      ),
                     ),
-                    onPressed: () {
-                      setState(() {
-                        todoList.removeAt(index);
-                      });
-                    },
                   ),
-                ),
-              ),
-              onDismissed: (direction) {
-                setState(() {
-                  todoList.removeAt(index);
-                });
-              },
-            );
-          }),
+                  onDismissed: (direction) {
+                    FirebaseFirestore.instance
+                        .collection('items')
+                        .doc(snapshot.data?.docs[index].id)
+                        .delete();
+                  },
+                );
+              });
+        },
+      ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.blue,
         onPressed: () {
@@ -68,13 +102,15 @@ class _HomeState extends State<Home> {
                     },
                   ),
                   actions: [
-                    ElevatedButton(onPressed: (){
-                      setState(() {
-                        todoList.add(userToDo);
-                      });
+                    ElevatedButton(
+                        onPressed: () {
+                          FirebaseFirestore.instance
+                              .collection('items')
+                              .add({'item': userToDo});
 
-                      Navigator.of(context).pop();
-                    }, child: const Text('Added'))
+                          Navigator.of(context).pop();
+                        },
+                        child: const Text('Added'))
                   ],
                 );
               });
@@ -83,7 +119,6 @@ class _HomeState extends State<Home> {
           Icons.add_box,
           color: Colors.white,
         ),
-
       ),
     );
   }
